@@ -28,43 +28,43 @@ MIN_CLUES = 2
 SIM_FACTOR = (9/10)
 
 def loadWords():
-    wordsfile = open('words.txt', 'r')
-    for line in wordsfile:
-        word = line.strip()
-        if word in MODEL.vocab.keys():
-            WORDS.add(word)
+  wordsfile = open('words.txt', 'r')
+  for line in wordsfile:
+    word = line.strip()
+    if word in MODEL.vocab.keys():
+      WORDS.add(word)
 
 def getRandomWord(usedWords):
-    diff = WORDS.difference(usedWords)
-    if len(diff) == 0:
-        raise Exception('All words used. Can\'t get new word.')
-    word = list(diff)[randint(0, len(diff)-1)]
-    return word
+  diff = WORDS.difference(usedWords)
+  if len(diff) == 0:
+    raise Exception('All words used. Can\'t get new word.')
+  word = list(diff)[randint(0, len(diff)-1)]
+  return word
 
 def fillBoard():
-    usedWords = set()
-    for i in range(NUM_TEAMS):
-        BOARD[i] = set()
-        for j in range(NUM_PER_TEAM):
-            word = getRandomWord(usedWords)
-            usedWords.add(word)
-            BOARD[i].add(word)
-    BOARD['black'] = set()
-    for i in range(NUM_BLACK):
-        word = getRandomWord(usedWords)
-        usedWords.add(word)
-        BOARD['black'].add(word)
-    BOARD['tan'] = set()
-    for i in range(NUM_BOARD_WORDS - (NUM_PER_TEAM * NUM_TEAMS) - NUM_BLACK):
-        word = getRandomWord(usedWords)
-        usedWords.add(word)
-        BOARD['tan'].add(word)
+  usedWords = set()
+  for i in range(NUM_TEAMS):
+    BOARD[i] = set()
+    for j in range(NUM_PER_TEAM):
+      word = getRandomWord(usedWords)
+      usedWords.add(word)
+      BOARD[i].add(word)
+  BOARD['black'] = set()
+  for i in range(NUM_BLACK):
+    word = getRandomWord(usedWords)
+    usedWords.add(word)
+    BOARD['black'].add(word)
+  BOARD['tan'] = set()
+  for i in range(NUM_BOARD_WORDS - (NUM_PER_TEAM * NUM_TEAMS) - NUM_BLACK):
+    word = getRandomWord(usedWords)
+    usedWords.add(word)
+    BOARD['tan'].add(word)
 
 def getAllWords():
-    words = set()
-    for k in BOARD:
-        words = words.union(BOARD[k])
-    return words
+  words = set()
+  for k in BOARD:
+    words = words.union(BOARD[k])
+  return words
 
 def loadFullModel(lim):
   global MODEL
@@ -72,88 +72,140 @@ def loadFullModel(lim):
   MODEL.save('best_' + str(lim) + '.bin')
 
 def loadModel(lim):
-    global MODEL
-    MODEL = models.KeyedVectors.load('best_' + str(lim) + '.bin', mmap='r')
+  global MODEL
+  MODEL = models.KeyedVectors.load('best_' + str(lim) + '.bin', mmap='r')
 
 def getWordSimilarity(word1, word2):
-    return MODEL.similarity(word1, word2)
+  return MODEL.similarity(word1, word2)
 
 def getMove(team):
-    if MODEL is None:
-        return None
-    goodWords = BOARD[team]
-    mehWords = BOARD['tan']
-    badWords = set()
-    worstWords = BOARD['black']
-    for k in BOARD:
-        if not k in [team, 'tan', 'black']:
-            badWords = badWords.union(BOARD[k])
+  if MODEL is None:
+    return None
+  goodWords = BOARD[team]
+  mehWords = BOARD['tan']
+  badWords = set()
+  worstWords = BOARD['black']
+  for k in BOARD:
+    if not k in [team, 'tan', 'black']:
+      badWords = badWords.union(BOARD[k])
 
-    equation = []
-    for word in goodWords:
-        equation.append([GOOD_COEF, word])
-    for word in mehWords:
-        equation.append([MEH_COEF, word])
-    for word in badWords:
-        equation.append([BAD_COEF, word])
-    for word in worstWords:
-        equation.append([WORST_COEF, word])
+  equation = []
+  for word in goodWords:
+    equation.append([GOOD_COEF, word])
+  for word in mehWords:
+    equation.append([MEH_COEF, word])
+  for word in badWords:
+    equation.append([BAD_COEF, word])
+  for word in worstWords:
+    equation.append([WORST_COEF, word])
 
-    bestSoFar = [0, '', []]
-    for vocabWord in MODEL.vocab.keys():
-        sum = 0
-        relevant = []
-        for term in equation:
-            distance = getWordSimilarity(vocabWord, term[1])
-            if distance > RELEVANCE_THRESHOLD_LOW and distance < RELEVANCE_THRESHOLD_HIGH:
-                sum += distance * term[0]
-                relevant.append([term[1], distance, term[0]])
+  bestSoFar = [0, '', []]
+  for vocabWord in MODEL.vocab.keys():
+    sum = 0
+    relevant = []
+    for term in equation:
+      distance = getWordSimilarity(vocabWord, term[1])
+      if distance > RELEVANCE_THRESHOLD_LOW and distance < RELEVANCE_THRESHOLD_HIGH:
+        sum += distance * term[0]
+        relevant.append([term[1], distance, term[0]])
         if sum > bestSoFar[0]:
-            bestSoFar = [sum, vocabWord, relevant]
-    return bestSoFar
+          bestSoFar = [sum, vocabWord, relevant]
+  return bestSoFar
 
 def getMove2(team):
-    if MODEL is None:
-        return None
-    bestCombo = [0, (), (), ()]
-    allWords = getAllWords()
-    for i in range(MIN_CLUES, MAX_CLUES+1):
-        combos = combinations(BOARD[team], i)
-        for combo in combos:
-            combo = set(combo)
-            badWords = combo.difference(allWords)
-            results = MODEL.most_similar(positive=combo, negative=badWords, topn=10)
-            for result in results:
-                guess = result[0].capitalize()
-                if guess in combo or (guess + 's') in combo or (guess[-1] == "s" and guess[-1] in combo):
-                    continue
-                sim = result[1] * math.pow(i, SIM_FACTOR)
-                if sim > bestCombo[0]:
-                    bestCombo = [sim, result[0], combo]
-        print(bestCombo)
-    return bestCombo
+  if MODEL is None:
+    return None
+  bestCombo = [0, (), (), ()]
+  allWords = getAllWords()
+  for i in range(MIN_CLUES, MAX_CLUES+1):
+    combos = combinations(BOARD[team], i)
+    for combo in combos:
+      combo = set(combo)
+      badWords = combo.difference(allWords)
+      results = MODEL.most_similar(positive=combo, negative=badWords, topn=10)
+      for result in results:
+        guess = result[0].capitalize()
+        if guess in combo or (guess + 's') in combo or (guess[-1] == "s" and guess[-1] in combo):
+          continue
+        sim = result[1] * math.pow(i, SIM_FACTOR)
+        if sim > bestCombo[0]:
+          bestCombo = [sim, result[0], combo]
+  return bestCombo
 
-def prettyPrintBoard():
-    allWords = getAllWords()
-    sq = math.floor(math.sqrt(NUM_BOARD_WORDS))
-    c = 0
-    for word in allWords:
-        if c == sq:
-            print()
-            c = 0
-        print(word, " " * (13 - len(word)), end='')
-        c +=1
+def prettyPrintBoard(verbose):
+  allWords = getAllWords()
+  sq = math.floor(math.sqrt(NUM_BOARD_WORDS))
+  c = 0
+  for word in allWords:
+    if c == sq:
+      print()
+      c = 0
+    print(word, " " * (13 - len(word)), end='')
+    c +=1
+  print()
+  print()
+  if verbose:
     print()
     for k in BOARD:
-        print("---", str(k), "---")
-        for word in BOARD[k]:
-            print(word)
+      print("---", str(k), "---")
+      for word in BOARD[k]:
+        print(word)
 
-loadFullModel(50000)
+
+def playGame(moveGetter):
+  fillBoard()
+  #prettyPrintBoard(True)
+  turn = randint(0,NUM_TEAMS-1)
+  while True:
+    moveInfo = moveGetter(turn)
+    hint = moveInfo[1]
+    prettyPrintBoard(False)
+    print()
+    print('Your hint is', hint, "for", len(moveInfo[2]), "words.")
+    while True:
+      for i in range(0, NUM_TEAMS):
+        if len(BOARD[i]) == 0:
+          print("Game over. Game won by team", i)
+          return
+      guess = input("Pick a word based on the above hint. Press 'enter' without typing anything to pass.\n")
+      guess = guess.capitalize()
+
+      if guess == '':
+        pass
+      elif not guess in getAllWords():
+        print("This word is not a valid word. Guess again.")
+        continue
+      elif guess in BOARD[turn]:
+        print('Correct! Guess again.')
+        BOARD[turn].remove(guess)
+        if len(BOARD[turn]) == 0:
+          print("Game over. Game won by team", turn)
+          return
+        continue
+      elif guess in BOARD['tan']:
+        print('That was a tan word. Turn over')
+        BOARD['tan'].remove(guess)
+      elif guess in BOARD['black']:
+        print('That was the black word. Game over.')
+        return
+      else:
+        for k in BOARD:
+          if guess in BOARD[k]:
+            print("That word was a team", k, "word. Turn over.")
+            BOARD[k].remove(guess)
+      print()
+      turn += 1
+      if turn == NUM_TEAMS:
+        turn = 0
+      break
+
+
+# Uncomment below line to recreate model with smaller vocab.
+#loadFullModel(50000)
+loadModel(50000)
 loadWords()
-fillBoard()
-prettyPrintBoard()
-move1 = getMove(0)
-print(move1)
-move2 = getMove(1)
-print(move2)
+playGame(getMove2)
+#move1 = getMove(0)
+#print(move1)
+#move2 = getMove(1)
+#print(move2)
