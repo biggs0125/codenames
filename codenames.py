@@ -75,6 +75,11 @@ def getAllWords():
         words = words.union(BOARD[k])
     return words
 
+def loadFullModel(lim):
+  global MODEL
+  MODEL = models.KeyedVectors.load_word2vec_format('GoogleNews-vectors-negative300.bin', binary=True, limit=lim)
+  MODEL.save('best_' + str(lim) + '.bin')
+
 def loadModel(lim):
     global MODEL
     #MODEL = models.KeyedVectors.load('best_500.bin', mmap='r')
@@ -122,16 +127,50 @@ def find_closest(com, candidate_words, vectors, allWords):
                key=lambda word_freq: cos_sim(com, vectors[word_freq[0]]))[0]
 
 def getMove(team):
+  if MODEL is None:
+    return None
+  goodWords = BOARD[team]
+  mehWords = BOARD['tan']
+  badWords = set()
+  worstWords = BOARD['black']
+  for k in BOARD:
+    if not k in [team, 'tan', 'black']:
+      badWords = badWords.union(BOARD[k])
+
+  equation = []
+  for word in goodWords:
+    equation.append([GOOD_COEF, word])
+  for word in mehWords:
+    equation.append([MEH_COEF, word])
+  for word in badWords:
+    equation.append([BAD_COEF, word])
+  for word in worstWords:
+    equation.append([WORST_COEF, word])
+
+  bestSoFar = [0, '', []]
+  for vocabWord in MODEL.vocab.keys():
+    sum = 0
+    relevant = []
+    for term in equation:
+      distance = getWordSimilarity(vocabWord, term[1])
+      if distance > RELEVANCE_THRESHOLD_LOW and distance < RELEVANCE_THRESHOLD_HIGH:
+        sum += distance * term[0]
+        relevant.append([term[1], distance, term[0]])
+        if sum > bestSoFar[0]:
+          bestSoFar = [sum, vocabWord, relevant]
+  return bestSoFar
+
+def getMove3(team):
     if MODEL is None:
         return None
 
     dist = FreqDist(w.lower() for w in brown.words())
     allWords = getAllWords()
 
-    candidate_words = dist.most_common(50000)
+    #candidate_words = dist.most_common(50000)
     goodWords = BOARD[team]
     #candidate_words = {cw for cw in candidate_words if (cw[0] in MODEL.vocab.keys())}
-    candidate_words = {(word, 0) for word in MODEL.vocab.keys() if '_' not in word}
+    candidate_words = {(word.lower(), 0) for word in MODEL.vocab.keys() if '_' not in word and word.lower() in MODEL.vocab.keys()}
     mehWords = BOARD['tan']
     badWords = set()
     worstWords = BOARD['black']
@@ -142,6 +181,16 @@ def getMove(team):
     for k in BOARD:
         if not k in [team, 'tan', 'black']:
             badWords = badWords.union(BOARD[k])
+
+    equation = []
+    for word in goodWords:
+        equation.append([GOOD_COEF, word])
+    for word in mehWords:
+        equation.append([MEH_COEF, word])
+    for word in badWords:
+        equation.append([BAD_COEF, word])
+    for word in worstWords:
+        equation.append([WORST_COEF, word])
 
     partitions = more_itertools.set_partitions(goodWords)
     best_score = -float(inf)
@@ -155,17 +204,16 @@ def getMove(team):
         partition_sizes[ps-1] += 1
         partition_scores[ps-1] += sc
         partition_scores_max[ps-1] = max(sc, partition_scores_max[ps-1])
-
         if sc > best_score:
           best_score = sc
           best_partition = partition_to_sc_com
 
-    print(partition_sizes)
-    print(partition_scores_max)
-    print(partition_scores/partition_sizes)
+    #print(partition_sizes)
+    #print(partition_scores_max)
+    #print(partition_scores/partition_sizes)
 
     #print(best_partition)
-    print(len(best_partition), sum(len(wset) for wset in best_partition))
+    #print(len(best_partition), sum(len(wset) for wset in best_partition))
     first_wset = max(best_partition, key=lambda x: best_partition[x][0])
     com = best_partition[first_wset][1]
 
@@ -194,27 +242,80 @@ def getMove2(team):
         print(bestCombo)
     return bestCombo
 
-def prettyPrintBoard():
-    allWords = getAllWords()
-    sq = math.floor(math.sqrt(NUM_BOARD_WORDS))
-    c = 0
-    for word in allWords:
-        if c == sq:
-            print('')
-            c = 0
-        print(word, " " * (13 - len(word)))
-        c +=1
-    print('')
+def prettyPrintBoard(verbose):
+  allWords = getAllWords()
+  sq = math.floor(math.sqrt(NUM_BOARD_WORDS))
+  c = 0
+  for word in allWords:
+    if c == sq:
+      print()
+      c = 0
+    print(word, " " * (13 - len(word)), end='')
+    c +=1
+  print()
+  print()
+  if verbose:
+    print()
     for k in BOARD:
-        print ("---", str(k), "---")
-        for word in BOARD[k]:
-            print(word)
+      print("---", str(k), "---")
+      for word in BOARD[k]:
+        print(word)
 
+
+def playGame(moveGetter):
+  fillBoard()
+  #prettyPrintBoard(True)
+  turn = randint(0,NUM_TEAMS-1)
+  while True:
+    moveInfo = moveGetter(turn)
+    hint = moveInfo[1]
+    prettyPrintBoard(False)
+    print()
+    print('Your hint is', hint, "for", len(moveInfo[2]), "words.")
+    while True:
+      for i in range(0, NUM_TEAMS):
+        if len(BOARD[i]) == 0:
+          print("Game over. Game won by team", i)
+          return
+      guess = input("Pick a word based on the above hint. Press 'enter' without typing anything to pass.\n")
+      guess = guess#.capitalize()
+
+      if guess == '':
+        pass
+      elif not guess in getAllWords():
+        print("This word is not a valid word. Guess again.")
+        continue
+      elif guess in BOARD[turn]:
+        print('Correct! Guess again.')
+        BOARD[turn].remove(guess)
+        if len(BOARD[turn]) == 0:
+          print("Game over. Game won by team", turn)
+          return
+        continue
+      elif guess in BOARD['tan']:
+        print('That was a tan word. Turn over')
+        BOARD['tan'].remove(guess)
+      elif guess in BOARD['black']:
+        print('That was the black word. Game over.')
+        return
+      else:
+        for k in BOARD:
+          if guess in BOARD[k]:
+            print("That word was a team", k, "word. Turn over.")
+            BOARD[k].remove(guess)
+      print()
+      turn += 1
+      if turn == NUM_TEAMS:
+        turn = 0
+      break
+
+
+# Uncomment below line to recreate model with smaller vocab.
+#loadFullModel(50000)
 loadModel(500000)
 loadWords()
-fillBoard()
-prettyPrintBoard()
-move1 = getMove(0)
-print(move1)
-move2 = getMove(1)
-print(move2)
+playGame(getMove3)
+#move1 = getMove(0)
+#print(move1)
+#move2 = getMove(1)
+#print(move2)
