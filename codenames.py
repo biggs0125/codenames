@@ -32,7 +32,7 @@ def loadWords():
     for line in wordsfile:
         word = line.strip()
         if word in MODEL.vocab.keys():
-            WORDS.add(word)    
+            WORDS.add(word)
 
 def getRandomWord(usedWords):
     diff = WORDS.difference(usedWords)
@@ -65,10 +65,15 @@ def getAllWords():
     for k in BOARD:
         words = words.union(BOARD[k])
     return words
-        
+
+def loadFullModel(lim):
+  global MODEL
+  MODEL = models.KeyedVectors.load_word2vec_format('GoogleNews-vectors-negative300.bin', binary=True, limit=lim)
+  MODEL.save('best_' + str(lim) + '.bin')
+
 def loadModel(lim):
     global MODEL
-    MODEL = models.KeyedVectors.load('best_500.bin', mmap='r')
+    MODEL = models.KeyedVectors.load('best_' + str(lim) + '.bin', mmap='r')
 
 def getWordSimilarity(word1, word2):
     return MODEL.similarity(word1, word2)
@@ -125,7 +130,7 @@ def getMove2(team):
                 sim = result[1] * math.pow(i, SIM_FACTOR)
                 if sim > bestCombo[0]:
                     bestCombo = [sim, result[0], combo]
-        print bestCombo
+        print(bestCombo)
     return bestCombo
 
 def prettyPrintBoard():
@@ -134,17 +139,17 @@ def prettyPrintBoard():
     c = 0
     for word in allWords:
         if c == sq:
-            print ''
+            print()
             c = 0
-        print word, " " * (13 - len(word)),
+        print(word, " " * (13 - len(word)), end='')
         c +=1
-    print ''
+    print()
     for k in BOARD:
-        print "---", str(k), "---"
+        print("---", str(k), "---")
         for word in BOARD[k]:
             print(word)
-    
-loadModel(500000)
+
+loadFullModel(50000)
 loadWords()
 fillBoard()
 prettyPrintBoard()
