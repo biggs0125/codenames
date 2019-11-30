@@ -23,9 +23,9 @@ RELEVANCE_THRESHOLD_LOW = 0.32
 RELEVANCE_THRESHOLD_HIGH = 0.95
 
 # ALGO 2 VARIABLES
-MAX_CLUES = 5
+MAX_CLUES = 4
 MIN_CLUES = 2
-SIM_FACTOR = (9/10)
+SIM_FACTOR = (4/5)
 
 def loadWords():
   wordsfile = open('words.txt', 'r')
@@ -69,9 +69,10 @@ def getAllWords():
 def loadFullModel(lim):
   global MODEL
   MODEL = models.KeyedVectors.load_word2vec_format('GoogleNews-vectors-negative300.bin', binary=True, limit=lim)
+  MODEL.vobab = dict(filter(lambda x: "_" not in x, MODEL.vocab))
   MODEL.save('best_' + str(lim) + '.bin')
 
-def loadModel(lim):
+def loadSavedModel(lim):
   global MODEL
   MODEL = models.KeyedVectors.load('best_' + str(lim) + '.bin', mmap='r')
 
@@ -125,7 +126,11 @@ def getMove2(team):
       results = MODEL.most_similar(positive=combo, negative=badWords, topn=10)
       for result in results:
         guess = result[0].capitalize()
-        if guess in combo or (guess + 's') in combo or (guess[-1] == "s" and guess[-1] in combo):
+        bad = False
+        for word in combo:
+          if guess in word or word in guess:
+            bad = True
+        if bad:
           continue
         sim = result[1] * math.pow(i, SIM_FACTOR)
         if sim > bestCombo[0]:
@@ -193,6 +198,9 @@ def playGame(moveGetter):
           if guess in BOARD[k]:
             print("That word was a team", k, "word. Turn over.")
             BOARD[k].remove(guess)
+            if len(BOARD[k]) == 0:
+              print("Game over. Game won by team", k)
+              return
       print()
       turn += 1
       if turn == NUM_TEAMS:
@@ -202,10 +210,6 @@ def playGame(moveGetter):
 
 # Uncomment below line to recreate model with smaller vocab.
 #loadFullModel(50000)
-loadModel(50000)
+loadSavedModel(50000)
 loadWords()
 playGame(getMove2)
-#move1 = getMove(0)
-#print(move1)
-#move2 = getMove(1)
-#print(move2)
